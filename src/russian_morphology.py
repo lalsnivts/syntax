@@ -18,12 +18,21 @@ POS_CODES = {
              u'МС':'PronounToSee',
              
              u'ЧАСТ':'Adv',
+             u'ЧИСЛ-П':'Card',
+              u'ПРИЧАСТИЕ':'Part',
+              u'ВВОДН':'Adv',
+              u'МЕЖД':'Intj'
              }
+
+DEFAULT_POS_CODE = 'V'
 
 
 
 def getPOS(lemma):
-    print lemma
-    info = morph.get_graminfo(lemma.upper())[0]
-    print info['class']
-    return POS_CODES[info['class']]
+    
+    morphInfo =  morph.get_graminfo(lemma.upper())
+    if morphInfo:
+        info = morph.get_graminfo(lemma.upper())[0]
+        print info['class']
+        return POS_CODES[info['class']]
+    return DEFAULT_POS_CODE

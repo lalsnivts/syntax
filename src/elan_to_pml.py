@@ -7,6 +7,8 @@ import file_utils
 import eaf_utils
 import russian_morphology
 
+import xml.etree.ElementTree as ET
+
 
 TEXT_EXTENSION = 'txt'
 WORD_EXTENSION = 'w'
@@ -155,7 +157,10 @@ def writeConversionToFiles(elanFilename, text_out, word_out, morph_out, synt_out
         sentenceInfo = textInfo[sentenceNum]
         word_out.write(WORD_SENTENCE_START)
         
-        text_out.write(sentenceInfo['sentence'] + '\r\n')
+        text_out.write(sentenceInfo['sentence'] + '\t' + sentenceInfo['sentenceRus']  + '\r\n')
+        print sentenceInfo['sentenceRus']
+        
+        
         morphInfo = sentenceInfo['morphology']
         morphSentenceStart = MORPH_SENTENCE_START\
                                .replace('DOC_ID', baseElanFilename)\
@@ -174,9 +179,6 @@ def writeConversionToFiles(elanFilename, text_out, word_out, morph_out, synt_out
             wordElement = createTokenElement(morphInfoElement['token'], baseElanFilename, sentenceNum, tokenNum)
             word_out.write(wordElement)
             
-            
-            if u'bisōn' in wordElement:
-                aa = 9
 
             morphElement, isSlip = createMorphElement(morphInfoElement, baseElanFilename, sentenceNum, tokenNum)
             morph_out.write(morphElement)
@@ -199,8 +201,10 @@ def createTokenElement(token, docId, sentenceNum, tokenNum):
                        
 def createMorphElement(morphInfoElement, docId, sentenceNum, tokenNum):
     token = morphInfoElement['token']
+    print token
     lemma = morphInfoElement['analysis'][0]['fon']
     analysisToPrint = '-'.join([(analysisElement['fon']+'=' + analysisElement['gloss']) for analysisElement in morphInfoElement['analysis']])
+    analysisToPrint = analysisToPrint.replace('--', '-')
     isSlip = (analysisToPrint.endswith('SLIP'))
     morphElement = fillInMorphElement(docId, sentenceNum, tokenNum, token, lemma, analysisToPrint, isSlip)
     return morphElement, isSlip
@@ -225,7 +229,11 @@ def fillInMorphElement(docId, sentenceNum, tokenNum, token, lemma, analysisToPri
                                
 def createSyntElement(morphInfoElement, docId, sentenceNum, tokenNum):
     lemmaGloss = morphInfoElement['analysis'][0]['gloss']
-    if isPronoun(lemmaGloss):
+    
+    
+    if morphInfoElement.get('pos') is not None:
+        pos = morphInfoElement['pos']    
+    elif isPronoun(lemmaGloss):
         pos = 'N'
     elif isPossessivePronoun(lemmaGloss):
         pos = 'Adj'
@@ -298,5 +306,65 @@ def createOutputFilename(folder, baseName, extension):
     return os.path.join(folder, baseName + '.' + extension)
 
 
-convertElanFileToPML("D://ForElan/ForSIL/2011 Hantayskoye Ozero Turskaya Minna Dmitriyevna L/2011_Hantayskoye_Ozero_Turskaya_Minna_Dmitriyevna_L_transliterated.eaf", 
-                     "D://Nivts//Syntax//nivts_treebank", "")
+
+
+
+def addSentenceToPML(pmlFile, sentenceFile):
+    corrFile = pmlFile + 'changed.a'
+    tree = ET.parse(pmlFile)
+    root = tree.getroot()
+    ns = {"xmlns":"http://ufal.mff.cuni.cz/pdt/pml/"}
+    treeXpath = ".//xmlns:LM"
+    trees = root.findall(treeXpath, ns)
+    print len(trees)
+    with codecs.open(corrFile, 'w', 'utf-8') as fout:
+        fout.write('<?xml version="1.0" encoding="UTF-8"?>'\
+'<lalsdata xmlns="http://ufal.mff.cuni.cz/pdt/pml/">'\
+  '<head>'\
+    '<schema href="lals_schema.xml" />'\
+    '<references>'\
+      '<reffile id="m" name="mdata" href="KetKel09_IrikovaMM_bes_haj_dit.m" />'\
+      '<reffile id="w" name="wdata" href="KetKel09_IrikovaMM_bes_haj_dit.w" />'\
+    '</references>'\
+  '</head>'\
+  '<meta>'\
+    '<annotation_info>'\
+      '<desc>ANNOTATION</desc>'\
+    '</annotation_info>'\
+  '</meta>'\
+  '<trees>')
+        with codecs.open(sentenceFile, 'r', 'utf-8') as sentenceIn:
+            for index, line in enumerate(sentenceIn):
+                lineParts = line.strip().split(u'—')
+                
+                ketSentence = ET.fromstring('<ketSentence></ketSentence>')
+                ketSentence.text = lineParts[0].strip()
+                trees[index].append(ketSentence)
+                
+                rusSentence = ET.fromstring('<rusSentence></rusSentence>')
+                rusSentence.text = lineParts[1].strip()
+                trees[index].append(rusSentence)
+
+
+                fout.write(ET.tostring(trees[index], encoding="utf-8", method="xml"))
+        fout.write("</trees></lalsdata>")
+                
+
+
+"""convertElanFileToPML("D://ForElan/ForSIL/2011 Hantayskoye Ozero Turskaya Minna Dmitriyevna L/2011_Hantayskoye_Ozero_Turskaya_Minna_Dmitriyevna_L_transliterated.eaf", 
+                     "D://Nivts//Syntax//nivts_treebank_test", "")"""
+                     
+                     
+"""convertElanFileToPML("D://ForElan//KetTexts//AllKetTexts//ForSite2014//LeBu//Kellog_IrikovaMM//KetKel09_IrikovaMM_bes_haj_dit.eaf", 
+                     "D://Nivts//Syntax//nivts_treebank", "")"""
+                     
+                     
+"""convertElanFileToPML("D://ForElan/KetTexts/AllKetTexts/ForSite2014/JugJug/Larikova_Is/Sul04_Latikova_Is.eaf", 
+                     "D://Nivts//Syntax//nivts_treebank", "")"""
+                     
+                     
+"""convertElanFileToPML("D://ForElan/ForSIL/2006 Ozero Bolshoe Sovetskoe Saygotin L-O 2/2006_Ozero_Bolshoe_Sovetskoe_Saygotin_LO2_transliterated.eaf", 
+                     "D://Nivts//Syntax//nivts_treebank", "")"""
+                     
+addSentenceToPML('D://Nivts//Syntax//nivts_treebank//LenaLast//Kel09_IrikovaMM_bes_haj_dit//Kel09_IrikovaMM_bes_haj_dit//KetKel09_IrikovaMM_bes_haj_dit.a',
+                 'D://Nivts//Syntax//nivts_treebank//LenaLast//Kel09_IrikovaMM_bes_haj_dit//Kel09_IrikovaMM_bes_haj_dit//KetKel09_IrikovaMM_bes_haj_dit.txt')         

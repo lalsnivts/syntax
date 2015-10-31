@@ -12,7 +12,7 @@ FON_XPATH = ".//TIER[@TIER_ID='fon']/ANNOTATION/REF_ANNOTATION"
 POS_XPATH = ".//TIER[@TIER_ID='pos']/ANNOTATION/REF_ANNOTATION"
 FONWORD_XPATH = ".//TIER[@TIER_ID='fonWord']/ANNOTATION/REF_ANNOTATION"
 RUS_XPATH = ".//TIER[@TIER_ID='rus']/ANNOTATION/REF_ANNOTATION"
-EVENKI_XPATH = ".//TIER[@TIER_ID='ev']/ANNOTATION/ALIGNABLE_ANNOTATION"
+LANGUAGE_XPATH = ".//TIER[@TIER_ID='%s']/ANNOTATION/ALIGNABLE_ANNOTATION"
 
 
 ANNOTATION_VALUE_XPATH = '/ANNOTATION_VALUE'
@@ -30,29 +30,34 @@ def getLocationByFilename(filename):
 
 
 
-def getTextInfo(filename):
+def getTextInfo(filename, languageCode):
     root = getRoot(filename)
-    sentences = getSentences(root)
+    sentences = getSentences(root, languageCode)
     textInfo = []
     for sentence in sentences:
         textInfoSentence = dict()
+        
         textInfoSentence['sentence'] = getAnnotationValueFromElement(sentence)
+        
+ 
         textInfoSentence['sentenceRus'] = getTranslationBySentence(root, sentence)
-        textInfoSentence['morphology'] = getTokensBySentence(root, sentence)
+        
+        textInfoSentence['morphology'] = getTokensBySentence(root, sentence, textInfoSentence['sentenceRus'])
         textInfo.append(textInfoSentence)
     return textInfo
         
         
     
 
-def getTokensBySentence(root, sentence):
+def getTokensBySentence(root, sentence, rusSentence):
     sentenceId = getElementId(sentence)
     fonWords = getFonWordsById(root, sentenceId)
     morphInfos = []
     for fonWord in fonWords:
         morphInfo = dict()
-        morphInfo['token'] = getAnnotationValueFromElement(fonWord)
-        morphInfo['analysis'] = getAnalysis(root, fonWord)
+        morphInfo['token'] = getAnnotationValueFromElement(fonWord, rusSentence)
+        
+        morphInfo['analysis'] = getAnalysis(root, fonWord, morphInfo['token'], rusSentence)
         morphInfo['pos'] = getPos(root, fonWord)
         morphInfos.append(morphInfo)
     return morphInfos
@@ -64,14 +69,28 @@ def getTranslationBySentence(root, sentence):
                       "='" + sentenceId+ "']"));
 
 
-def getAnalysis(root, fonWord):
+def getAnalysis(root, fonWord, fonToken, rusSentence):
     fonWordId = getElementId(fonWord)
     fons = getFonsById(root, fonWordId)
     analysis = []
+    if len(fons) == 0:
+        raise Exception('No fon elements for fonWord with id %s (%s), sentence: %s' % (fonWordId, fonToken, rusSentence))
+    
     for fon in fons:
         fonId = getElementId(fon)
         gloss = getGlossById(root, fonId)
-        analysis.append({'fon':getAnnotationValueFromElement(fon), 'gloss': getAnnotationValueFromElement(gloss)})
+        
+        fonValue = getAnnotationValueFromElement(fon, rusSentence)
+        if fonValue is None:
+            raise Exception('No fon element for fonWord %s with id: %s, sentence: %s' % (fonWordId, fonToken, rusSentence))
+        
+        if gloss is None:
+            raise Exception('No gloss element for fonWord %s with id: %s, sentence: %s' % (fonWordId, fonToken, rusSentence))
+        
+        glossValue = getAnnotationValueFromElement(gloss, rusSentence)
+        if glossValue is None:
+            raise Exception('No gloss element for fonWord %s with id: %s, sentence: %s' % (fonWordId, fonToken, rusSentence))
+        analysis.append({'fon' : fonValue, 'gloss': glossValue})
     return analysis
 
 
@@ -89,12 +108,19 @@ def getRoot(filename):
     return tree.getroot()
 
 
-def getSentences(root):
-    return root.findall(EVENKI_XPATH)
+def getSentences(root, languageCode):
+    languageXpathWithCode = LANGUAGE_XPATH % languageCode
+    return root.findall(languageXpathWithCode)
 
 
-def getAnnotationValueFromElement(element):
-    return element.find('.' + ANNOTATION_VALUE_XPATH).text.strip()
+def getAnnotationValueFromElement(element, rusSentence = None):
+    elementText = element.find('.' + ANNOTATION_VALUE_XPATH).text
+    if elementText:
+        return elementText.strip()
+    errorText = 'Empty element found'
+    if rusSentence is not None:
+        errorText += ' for sentence %s' % rusSentence
+    raise Exception(errorText)
 
 
 def getElementId(element):

@@ -15,11 +15,12 @@ POS_CODES = {
              u'МС-П':'Det',
              u'Н':'Adv',
              u'ПРЕДЛ':'Prep',
-             u'МС':'PronounToSee',
+             u'МС':'Pro',
              
              u'ЧАСТ':'Adv',
              u'ЧИСЛ-П':'Card',
-              u'ПРИЧАСТИЕ':'Part',
+              u'ПРИЧАСТИЕ':'PR',
+              u'ДЕЕПРИЧАСТИЕ':'CV',
               u'ВВОДН':'Adv',
               u'МЕЖД':'Intj'
              }
@@ -33,6 +34,5 @@ def getPOS(lemma):
     morphInfo =  morph.get_graminfo(lemma.upper())
     if morphInfo:
         info = morph.get_graminfo(lemma.upper())[0]
-        print info['class']
         return POS_CODES[info['class']]
     return DEFAULT_POS_CODE

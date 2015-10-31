@@ -66,7 +66,6 @@ MORPH_ELEMENT = '<m id="m-DOC_ID-sSENTENCE_NUMwTOKEN_NUM">\
       <form>FORM</form>\
       <lemma>LEMMA</lemma>\
       <tag>TAG</tag>\
-      <!--<analysis>ANALYSIS</analysis>-->\
     </m>'
     
     
@@ -122,13 +121,23 @@ PARTICIPLE_CODES = ['PANT',
   
 
 
-def convertElanFileToPML(elanFilename, pmlFolder, metaDescription):
+def convertElanFileToPML(elanFilename, pmlFolder, metaDescription, languageCode):
     baseElanFilename = file_utils.getTextTitle(elanFilename)
     text_filename = createOutputFilename(pmlFolder, baseElanFilename, TEXT_EXTENSION)
     word_filename = createOutputFilename(pmlFolder, baseElanFilename, WORD_EXTENSION)
     morph_filename = createOutputFilename(pmlFolder, baseElanFilename, MORPH_EXTENSION)
     syntactic_filename = createOutputFilename(pmlFolder, baseElanFilename, SYNTACTIC_EXTENSION)
-    print word_filename
+    
+    textInfo = eaf_utils.getTextInfo(elanFilename, languageCode)
+    if len(textInfo) == 0:
+        raise Exception('Error occurred: no sentences found. Check the tier name')
+    
+    writeToFile(text_filename, word_filename, morph_filename, syntactic_filename, baseElanFilename,
+                textInfo, metaDescription)
+    
+
+def writeToFile(text_filename, word_filename, morph_filename, syntactic_filename, baseElanFilename,
+                textInfo, metaDescription):
     with codecs.open(text_filename, 'w', 'utf-8' ) as text_out:
         with codecs.open(word_filename, 'w', 'utf-8' ) as word_out:
             with codecs.open(morph_filename, 'w', 'utf-8' ) as morph_out:
@@ -141,26 +150,24 @@ def convertElanFileToPML(elanFilename, pmlFolder, metaDescription):
                     
                     morphStart = MORPH_START.replace('WORD_FILENAME', os.path.basename(word_filename))
                     syntStart = SYNT_START.replace('WORD_FILENAME', os.path.basename(word_filename))\
-                                           .replace('MORPH_FILENAME', os.path.basename(morph_filename))
+                                           .replace('MORPH_FILENAME', os.path.basename(morph_filename))\
+                                           .replace('ANNOTATION', metaDescription)
                     
                     
                     morph_out.write(morphStart)
                     synt_out.write(syntStart)
-                    writeConversionToFiles(elanFilename, text_out, word_out, morph_out, synt_out, baseElanFilename) 
+                    writeConversionToFiles(textInfo, text_out, word_out, morph_out, synt_out, baseElanFilename) 
                     word_out.write(WORD_END)
                     morph_out.write(MORPH_END)
                     synt_out.write(SYNT_END)
     
-def writeConversionToFiles(elanFilename, text_out, word_out, morph_out, synt_out, baseElanFilename):
-    textInfo = eaf_utils.getTextInfo(elanFilename) 
-    for sentenceNum in range(0, len(textInfo)):
-        sentenceInfo = textInfo[sentenceNum]
+def writeConversionToFiles(textInfo, text_out, word_out, morph_out, synt_out, baseElanFilename):
+    
+    for sentenceNum, sentenceInfo in enumerate(textInfo):
         word_out.write(WORD_SENTENCE_START)
         
         text_out.write(sentenceInfo['sentence'] + '\t' + sentenceInfo['sentenceRus']  + '\r\n')
-        print sentenceInfo['sentenceRus']
-        
-        
+       
         morphInfo = sentenceInfo['morphology']
         morphSentenceStart = MORPH_SENTENCE_START\
                                .replace('DOC_ID', baseElanFilename)\
@@ -201,7 +208,6 @@ def createTokenElement(token, docId, sentenceNum, tokenNum):
                        
 def createMorphElement(morphInfoElement, docId, sentenceNum, tokenNum):
     token = morphInfoElement['token']
-    print token
     lemma = morphInfoElement['analysis'][0]['fon']
     analysisToPrint = '-'.join([(analysisElement['fon']+'=' + analysisElement['gloss']) for analysisElement in morphInfoElement['analysis']])
     analysisToPrint = analysisToPrint.replace('--', '-')
@@ -309,30 +315,19 @@ def createOutputFilename(folder, baseName, extension):
 
 
 
-def addSentenceToPML(pmlFile, sentenceFile):
+def addSentenceToPML(pmlFile, sentenceFile, morphFile, wordFile):
     corrFile = pmlFile + 'changed.a'
     tree = ET.parse(pmlFile)
     root = tree.getroot()
     ns = {"xmlns":"http://ufal.mff.cuni.cz/pdt/pml/"}
     treeXpath = ".//xmlns:LM"
     trees = root.findall(treeXpath, ns)
-    print len(trees)
+    
+    syntStartForFile = SYNT_START.replace('MORPH_FILENAME', morphFile)\
+                                    .replace('WORD_FILENAME', wordFile)
+    
     with codecs.open(corrFile, 'w', 'utf-8') as fout:
-        fout.write('<?xml version="1.0" encoding="UTF-8"?>'\
-'<lalsdata xmlns="http://ufal.mff.cuni.cz/pdt/pml/">'\
-  '<head>'\
-    '<schema href="lals_schema.xml" />'\
-    '<references>'\
-      '<reffile id="m" name="mdata" href="KetKel09_IrikovaMM_bes_haj_dit.m" />'\
-      '<reffile id="w" name="wdata" href="KetKel09_IrikovaMM_bes_haj_dit.w" />'\
-    '</references>'\
-  '</head>'\
-  '<meta>'\
-    '<annotation_info>'\
-      '<desc>ANNOTATION</desc>'\
-    '</annotation_info>'\
-  '</meta>'\
-  '<trees>')
+        fout.write(syntStartForFile)
         with codecs.open(sentenceFile, 'r', 'utf-8') as sentenceIn:
             for index, line in enumerate(sentenceIn):
                 lineParts = line.strip().split(u'—')
@@ -348,23 +343,7 @@ def addSentenceToPML(pmlFile, sentenceFile):
 
                 fout.write(ET.tostring(trees[index], encoding="utf-8", method="xml"))
         fout.write("</trees></lalsdata>")
-                
 
 
-"""convertElanFileToPML("D://ForElan/ForSIL/2011 Hantayskoye Ozero Turskaya Minna Dmitriyevna L/2011_Hantayskoye_Ozero_Turskaya_Minna_Dmitriyevna_L_transliterated.eaf", 
-                     "D://Nivts//Syntax//nivts_treebank_test", "")"""
-                     
-                     
-"""convertElanFileToPML("D://ForElan//KetTexts//AllKetTexts//ForSite2014//LeBu//Kellog_IrikovaMM//KetKel09_IrikovaMM_bes_haj_dit.eaf", 
-                     "D://Nivts//Syntax//nivts_treebank", "")"""
-                     
-                     
-"""convertElanFileToPML("D://ForElan/KetTexts/AllKetTexts/ForSite2014/JugJug/Larikova_Is/Sul04_Latikova_Is.eaf", 
-                     "D://Nivts//Syntax//nivts_treebank", "")"""
-                     
-                     
-"""convertElanFileToPML("D://ForElan/ForSIL/2006 Ozero Bolshoe Sovetskoe Saygotin L-O 2/2006_Ozero_Bolshoe_Sovetskoe_Saygotin_LO2_transliterated.eaf", 
-                     "D://Nivts//Syntax//nivts_treebank", "")"""
-                     
-addSentenceToPML('D://Nivts//Syntax//nivts_treebank//LenaLast//Kel09_IrikovaMM_bes_haj_dit//Kel09_IrikovaMM_bes_haj_dit//KetKel09_IrikovaMM_bes_haj_dit.a',
-                 'D://Nivts//Syntax//nivts_treebank//LenaLast//Kel09_IrikovaMM_bes_haj_dit//Kel09_IrikovaMM_bes_haj_dit//KetKel09_IrikovaMM_bes_haj_dit.txt')         
+"""convertElanFileToPML(u"D://ForElan//KetTexts//AllKetTexts//ForSite2014//JugJug/Latikova_Kuskat//Sul04_Latikova_Kuskat.eaf", 
+                     "D://Nivts//Syntax//nivts_treebank", u"Латикова", "ev")"""
